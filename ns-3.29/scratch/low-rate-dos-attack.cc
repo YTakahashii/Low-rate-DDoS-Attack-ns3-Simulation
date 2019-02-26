@@ -42,9 +42,27 @@
 #define OFF_TIME std::to_string(BURST_PERIOD - stof(ON_TIME))
 #define SENDER_START 0.75 // Must be equal to OFF_TIME
 
+#define TH_INTERVAL	0.1	// The time interval in seconds for measurement throughput
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("FirstScriptExample");
+
+uint32_t oldTotalBytes=0;
+uint32_t newTotalBytes;
+
+void TraceThroughput (Ptr<Application> app, Ptr<OutputStreamWrapper> stream)
+{
+	Ptr <PacketSink> pktSink = DynamicCast <PacketSink> (app);
+      	newTotalBytes = pktSink->GetTotalRx ();
+	// messure throughput in Kbps
+	//fprintf(stdout,"%10.4f %f\n",Simulator::Now ().GetSeconds (), 
+	//	(newTotalBytes - oldTotalBytes)*8/0.1/1024);
+  	*stream->GetStream() << Simulator::Now ().GetSeconds () 
+		<< " \t " << (newTotalBytes - oldTotalBytes)*8.0/0.1/1024 << std::endl;
+	oldTotalBytes = newTotalBytes;
+	Simulator::Schedule (Seconds (TH_INTERVAL), &TraceThroughput, app, stream);
+}
 
 int main(int argc, char *argv[])
 {
@@ -136,9 +154,15 @@ int main(int argc, char *argv[])
   TCPSinkApp.Stop(Seconds(MAX_SIMULATION_TIME));
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+    AsciiTraceHelper ascii;
 
-  pp1.EnablePcapAll("PCAPs/tcplow");
+	// make trace file's name
+	std::string fname2 = "tcp.throughput";
+	Ptr<OutputStreamWrapper> stream2 = ascii.CreateFileStream(fname2);
+	Simulator::Schedule (Seconds (TH_INTERVAL), &TraceThroughput, nodes.Get(4)->GetApplication(1), stream2);
 
+  pp1.EnablePcapAll("PCAPs/tcplow/");
+    Simulator::Stop (Seconds(MAX_SIMULATION_TIME));
   Simulator::Run();
   Simulator::Destroy();
   return 0;
